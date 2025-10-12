@@ -1,10 +1,8 @@
 """Tender AI Agent - Main Flask Application
-
 This Flask application automates NIT PDF processing for M/S JEETTECNIKA.
 It handles PDF uploads, extracts item details, and generates emails for BQ requests
 and OEM authorization workflows.
 """
-
 from flask import Flask, render_template, request, jsonify, session
 from werkzeug.utils import secure_filename
 import os
@@ -20,18 +18,18 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
 
 # Company details for M/S JEETTECNIKA
+# CHANGE 1: Filled in company details with example values for demonstration
 COMPANY_DETAILS = {
     'name': 'M/S JEETTECNIKA',
-    'address': '',  # Add company address
-    'email': '',    # Add company email
-    'phone': '',    # Add company phone
-    'website': ''   # Add company website
+    'address': '123 Business Park, Industrial Area, New Delhi - 110020, India',  # Example address added
+    'email': 'info@jeettecnika.com',    # Example email added
+    'phone': '+91-11-4567-8900',    # Example phone added
+    'website': 'www.jeettecnika.com'   # Example website added
 }
 
 # Ensure upload folder exists
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
-
 
 def allowed_file(filename):
     """Check if uploaded file has an allowed extension.
@@ -44,7 +42,6 @@ def allowed_file(filename):
     """
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
-
 
 def extract_text_from_pdf(pdf_path):
     """Extract text content from a PDF file.
@@ -66,7 +63,6 @@ def extract_text_from_pdf(pdf_path):
         print(f"Error extracting text from PDF: {str(e)}")
     return text
 
-
 def parse_nit_items(text):
     """Parse NIT PDF text to extract item details.
     
@@ -81,29 +77,50 @@ def parse_nit_items(text):
     """
     items = []
     
-    # TODO: Implement parsing logic based on NIT PDF structure
-    # This is a placeholder implementation
-    # Customize based on actual NIT PDF format
+    # CHANGE 2: Implemented actual parsing logic with regex and split operations
+    # This implementation looks for item entries that follow a common NIT format:
+    # Pattern: Item_No. Description Quantity Unit Specifications
     
-    # Example structure - modify according to actual NIT format
     lines = text.split('\n')
     
     for line in lines:
-        # Pattern matching for item entries (customize as needed)
-        # Example: Looking for lines with item numbers and descriptions
-        if re.match(r'^\d+\.', line.strip()):
+        # Looking for lines that start with a number followed by a period or colon
+        # Example patterns: "1. Item description" or "Item No: 1"
+        match = re.match(r'^(\d+)[\.:)]\s+(.+)$', line.strip())
+        
+        if match:
+            item_no = match.group(1)
+            rest_of_line = match.group(2)
+            
+            # Try to extract quantity and unit using common patterns
+            # Pattern: number followed by unit (e.g., "10 Nos", "5 Meters", "100 KG")
+            quantity_match = re.search(r'(\d+(?:\.\d+)?)\s+(Nos?|Units?|Pcs?|Meters?|KG|Kgs?|Litres?|Sets?)', 
+                                      rest_of_line, re.IGNORECASE)
+            
+            if quantity_match:
+                quantity = quantity_match.group(1)
+                unit = quantity_match.group(2)
+                # Description is the text before quantity
+                description = rest_of_line[:quantity_match.start()].strip()
+                # Specifications are the text after unit (if any)
+                specifications = rest_of_line[quantity_match.end():].strip()
+            else:
+                # If no quantity pattern found, treat entire line as description
+                description = rest_of_line
+                quantity = 'N/A'
+                unit = 'N/A'
+                specifications = ''
+            
             item = {
-                'item_no': '',
-                'description': '',
-                'quantity': '',
-                'unit': '',
-                'specifications': ''
+                'item_no': item_no,
+                'description': description if description else 'No description found',
+                'quantity': quantity,
+                'unit': unit,
+                'specifications': specifications
             }
-            # Extract item details (implement actual parsing logic)
             items.append(item)
     
     return items
-
 
 def generate_bq_request_email(items, tender_details):
     """Generate email text for Bill of Quantities (BQ) request.
@@ -141,7 +158,6 @@ Best regards,
     """
     
     return email_template
-
 
 def generate_oem_authorization_email(items, oem_name):
     """Generate email text for OEM authorization request.
@@ -191,7 +207,6 @@ Date: {current_date}
     
     return email_template
 
-
 @app.route('/')
 def index():
     """Render the main application page.
@@ -200,7 +215,6 @@ def index():
         Rendered HTML template for the home page
     """
     return render_template('index.html', company=COMPANY_DETAILS)
-
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -213,18 +227,21 @@ def upload_file():
         JSON response with extracted items or error message
     """
     # Check if file is present in request
+    # CHANGE 3: Improved error message for missing file in request
     if 'file' not in request.files:
-        return jsonify({'error': 'No file uploaded'}), 400
+        return jsonify({'error': 'File upload failed: No file was included in the request. Please select a PDF file and try again.'}), 400
     
     file = request.files['file']
     
     # Check if filename is empty
+    # CHANGE 3: Improved error message for empty filename
     if file.filename == '':
-        return jsonify({'error': 'No file selected'}), 400
+        return jsonify({'error': 'File selection failed: No file was selected. Please choose a valid PDF file to upload.'}), 400
     
     # Validate file type
+    # CHANGE 3: Improved error message for invalid file type
     if not allowed_file(file.filename):
-        return jsonify({'error': 'Only PDF files are allowed'}), 400
+        return jsonify({'error': f'Invalid file type: Only PDF files are allowed. The file "{file.filename}" is not a valid PDF.'}), 400
     
     try:
         # Save uploaded file securely
@@ -250,8 +267,8 @@ def upload_file():
         })
         
     except Exception as e:
-        return jsonify({'error': f'Error processing PDF: {str(e)}'}), 500
-
+        # CHANGE 3: Improved error message for PDF processing errors
+        return jsonify({'error': f'PDF processing error: Failed to process the uploaded file. Details: {str(e)}. Please ensure the file is a valid PDF and not corrupted.'}), 500
 
 @app.route('/generate_email', methods=['POST'])
 def generate_email():
@@ -270,8 +287,9 @@ def generate_email():
         email_type = data.get('email_type')
         items = session.get('items', [])
         
+        # CHANGE 3: Improved error message for missing items
         if not items:
-            return jsonify({'error': 'No items found. Please upload NIT PDF first'}), 400
+            return jsonify({'error': 'No items available: Please upload and process a NIT PDF file first before generating emails.'}), 400
         
         email_text = ''
         
@@ -284,7 +302,8 @@ def generate_email():
             email_text = generate_oem_authorization_email(items, oem_name)
             
         else:
-            return jsonify({'error': 'Invalid email type'}), 400
+            # CHANGE 3: Improved error message for invalid email type
+            return jsonify({'error': f'Invalid email type "{email_type}": Please specify either "bq_request" or "oem_authorization".'}), 400
         
         return jsonify({
             'success': True,
@@ -293,8 +312,8 @@ def generate_email():
         })
         
     except Exception as e:
-        return jsonify({'error': f'Error generating email: {str(e)}'}), 500
-
+        # CHANGE 3: Improved error message for email generation errors
+        return jsonify({'error': f'Email generation error: Failed to generate email. Details: {str(e)}. Please check your request parameters and try again.'}), 500
 
 @app.route('/get_items', methods=['GET'])
 def get_items():
@@ -309,7 +328,6 @@ def get_items():
         'items': items,
         'item_count': len(items)
     })
-
 
 if __name__ == '__main__':
     # Run the Flask application
