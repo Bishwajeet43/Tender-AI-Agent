@@ -1,0 +1,48 @@
+name: Deploy to Google Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy tender-ai-agent \
+            --source . \
+            --platform managed \
+            --region us-central1 \
+            --allow-unauthenticated \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Show deployment URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe tender-ai-agent --platform managed --region us-central1 --format 'value(status.url)')
+          echo "Deployment URL: $SERVICE_URL"
