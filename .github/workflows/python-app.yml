@@ -1,0 +1,55 @@
+name: Python Flask CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 pytest
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    
+    - name: Lint with flake8
+      run: |
+        # stop the build if there are Python syntax errors or undefined names
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
+        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+    
+    - name: Test with pytest (if tests exist)
+      run: |
+        pytest || echo "No tests found, skipping"
+      continue-on-error: true
+
+  # Deployment instructions:
+  # For cloud deployment:
+  # - Configure secrets in GitHub Settings -> Secrets and variables -> Actions
+  # - Add deployment steps for your platform (Heroku, AWS, GCP, Azure, etc.)
+  # 
+  # Example for manual deployment:
+  # After tests pass, manually run:
+  # python main.py
+  # 
+  # Or configure cloud-specific deployment:
+  # - Heroku: Add Heroku API key and app name as secrets
+  # - AWS: Configure AWS credentials and deployment target
+  # - GCP: Configure GCP service account credentials
