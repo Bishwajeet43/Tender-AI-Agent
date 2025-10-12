@@ -31,6 +31,7 @@ COMPANY_DETAILS = {
 if not os.path.exists(app.config['UPLOAD_FOLDER']):
     os.makedirs(app.config['UPLOAD_FOLDER'])
 
+
 def allowed_file(filename):
     """Check if uploaded file has an allowed extension.
     
@@ -42,6 +43,7 @@ def allowed_file(filename):
     """
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
+
 
 def extract_text_from_pdf(pdf_path):
     """Extract text content from a PDF file.
@@ -58,10 +60,12 @@ def extract_text_from_pdf(pdf_path):
             pdf_reader = PyPDF2.PdfReader(file)
             for page_num in range(len(pdf_reader.pages)):
                 page = pdf_reader.pages[page_num]
-                text += page.extract_text()
+                page_text = page.extract_text() or ''
+                text += page_text + "\n"
     except Exception as e:
         print(f"Error extracting text from PDF: {str(e)}")
     return text
+
 
 def parse_nit_items(text):
     """Parse NIT PDF text to extract item details.
@@ -76,27 +80,27 @@ def parse_nit_items(text):
         list: List of dictionaries containing item details
     """
     items = []
-    
+
     # CHANGE 2: Implemented actual parsing logic with regex and split operations
     # This implementation looks for item entries that follow a common NIT format:
     # Pattern: Item_No. Description Quantity Unit Specifications
-    
+
     lines = text.split('\n')
-    
+
     for line in lines:
         # Looking for lines that start with a number followed by a period or colon
         # Example patterns: "1. Item description" or "Item No: 1"
-        match = re.match(r'^(\d+)[\.\:)\]\s+(.+)$', line.strip())
-        
+        match = re.match(r'^(\d+)[\.:)\]]\s+(.+)$', line.strip())
+
         if match:
             item_no = match.group(1)
             rest_of_line = match.group(2)
-            
+
             # Try to extract quantity and unit using common patterns
             # Pattern: number followed by unit (e.g., "10 Nos", "5 Meters", "100 KG")
-            quantity_match = re.search(r'(\d+(?:\.\d+)?)\s+(Nos?|Units?|Pcs?|Meters?|KG|Kgs?|Litres?|Sets?)', 
+            quantity_match = re.search(r'(\d+(?:\.\d+)?)\s+(Nos?|Units?|Pcs?|Meters?|KG|Kgs?|Litres?|Sets?)',
                                       rest_of_line, re.IGNORECASE)
-            
+
             if quantity_match:
                 quantity = quantity_match.group(1)
                 unit = quantity_match.group(2)
@@ -110,7 +114,7 @@ def parse_nit_items(text):
                 quantity = 'N/A'
                 unit = 'N/A'
                 specifications = ''
-            
+
             item = {
                 'item_no': item_no,
                 'description': description if description else 'No description found',
@@ -119,8 +123,9 @@ def parse_nit_items(text):
                 'specifications': specifications
             }
             items.append(item)
-    
+
     return items
+
 
 def generate_bq_request_email(items, tender_details):
     """Generate email text for Bill of Quantities (BQ) request.
@@ -134,31 +139,18 @@ def generate_bq_request_email(items, tender_details):
     """
     email_template = f"""
 Subject: Request for Bill of Quantities - {tender_details.get('tender_name', 'NIT')}
-
 Dear Sir/Madam,
-
 We, {COMPANY_DETAILS['name']}, are writing to request the Bill of Quantities (BQ) for the following tender:
-
 Tender Reference: {tender_details.get('tender_ref', 'N/A')}
 Tender Name: {tender_details.get('tender_name', 'N/A')}
 Issue Date: {tender_details.get('issue_date', 'N/A')}
-
 We would appreciate receiving the detailed Bill of Quantities for the items listed in the Notice Inviting Tender.
-
 Total Items: {len(items)}
-
 Please provide the BQ at your earliest convenience to enable us to prepare our quotation.
 
-Thank you for your cooperation.
-
-Best regards,
-Bishwajeet Kumar Sharma
-{COMPANY_DETAILS['name']}
-{COMPANY_DETAILS.get('email', '')}
-{COMPANY_DETAILS.get('phone', '')}
-    """
-    
+"""
     return email_template
+
 
 def generate_oem_authorization_email(items, oem_name):
     """Generate email text for OEM authorization request.
@@ -171,42 +163,96 @@ def generate_oem_authorization_email(items, oem_name):
         str: Formatted email text for OEM authorization request
     """
     current_date = datetime.now().strftime('%B %d, %Y')
-    
-    email_template = f"""
-Subject: Request for OEM Authorization Certificate - {oem_name}
 
-Dear {oem_name} Team,
+    lines = [
+        f"Subject: Request for OEM Authorization Certificate - {oem_name}",
+        f"Dear {oem_name} Team,",
+        f"We, {COMPANY_DETAILS['name']}, are an authorized dealer/distributor interested in participating in government tenders.",
+        "We kindly request an OEM Authorization Certificate for the following items/products:",
+    ]
 
-We, {COMPANY_DETAILS['name']}, are an authorized dealer/distributor interested in participating in government tenders.
-
-We kindly request an OEM Authorization Certificate for the following items/products:
-
-"""
-    
     # Add item details to email
     for idx, item in enumerate(items, 1):
-        email_template += f"{idx}. {item.get('description', 'N/A')}\n"
-    
-    email_template += f"""
-The authorization certificate should:
-- Confirm our authorized dealer/distributor status
-- Include validity period
-- Be on official company letterhead with signature and stamp
-- Include any relevant technical support commitments
+        lines.append(f"{idx}. {item.get('description', 'N/A')}")
 
-This authorization is required for tender participation. We would greatly appreciate receiving this at your earliest convenience.
+    lines += [
+        "",
+        "The authorization certificate should:",
+        "- Confirm our authorized dealer/distributor status",
+        "- Include validity period",
+        "- Be on official company letterhead with signature and stamp",
+        "- Include any relevant technical support commitments",
+        "This authorization is required for tender participation. We would greatly appreciate receiving this at your earliest convenience.",
+        "",
+    ]
 
-Thank you for your support.
+    return "\n".join(lines)
 
-Best regards,
-Bishwajeet Kumar Sharma
-{COMPANY_DETAILS['name']}
-{COMPANY_DETAILS.get('email', '')}
-{COMPANY_DETAILS.get('phone', '')}
-Date: {current_date}
+
+# NEW: Combined email generator for single mail body with automatic signature
+
+def generate_combined_email(items, tender_details, oem_name):
+    """Generate a single combined email body that includes both:
+    - BQ Request content, and
+    - OEM Authorization request content
+
+    The function automatically appends a consistent signature footer.
+
+    Args:
+        items (list): Items parsed from NIT
+        tender_details (dict): Tender details for BQ request
+        oem_name (str): Target OEM name
+
+    Returns:
+        str: Combined email body text
     """
-    
-    return email_template
+    # Build BQ request section (without signature)
+    bq_body = generate_bq_request_email(items, tender_details).strip()
+    # Remove any subject/header lines from BQ for body-only merge
+    bq_lines = [ln for ln in bq_body.splitlines() if not ln.startswith('Subject:')]
+    bq_section = "\n".join(bq_lines).strip()
+
+    # Build OEM authorization section (without signature)
+    oem_body = generate_oem_authorization_email(items, oem_name).strip()
+    oem_lines = [ln for ln in oem_body.splitlines() if not ln.startswith('Subject:')]
+    oem_section = "\n".join(oem_lines).strip()
+
+    # Signature footer (auto)
+    current_date = datetime.now().strftime('%B %d, %Y')
+    signature = (
+        "Best regards,\n"
+        "Bishwajeet Kumar Sharma\n"
+        f"{COMPANY_DETAILS['name']}\n"
+        f"{COMPANY_DETAILS.get('email', '')}\n"
+        f"{COMPANY_DETAILS.get('phone', '')}\n"
+        f"Date: {current_date}"
+    )
+
+    combined = [
+        f"Subject: BQ Request and OEM Authorization - {tender_details.get('tender_name', 'NIT')} / {oem_name}",
+        "Dear Sir/Madam,",
+        "",
+        "Below are our two requests in a single email for your convenience:",
+        "",
+        "-- BQ REQUEST --",
+        bq_section,
+        "",
+        "-- OEM AUTHORIZATION --",
+        oem_section,
+        "",
+        signature,
+    ]
+
+    return "\n".join(combined)
+
+
+# Example usage (for reference/documentation only)
+# combined_text = generate_combined_email(
+#     items=[{"description": "Item A", "quantity": "10", "unit": "Nos"}],
+#     tender_details={"tender_ref": "ABC/123", "tender_name": "Supply of X", "issue_date": "2025-10-01"},
+#     oem_name="ACME Corp"
+# )
+
 
 @app.route('/')
 def index():
@@ -216,6 +262,7 @@ def index():
         Rendered HTML template for the home page
     """
     return render_template('index.html', company=COMPANY_DETAILS)
+
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -231,45 +278,46 @@ def upload_file():
     # CHANGE 3: Improved error message for missing file in request
     if 'file' not in request.files:
         return jsonify({'error': 'File upload failed: No file was included in the request. Please select a PDF file and try again.'}), 400
-    
+
     file = request.files['file']
-    
+
     # Check if filename is empty
     # CHANGE 3: Improved error message for empty filename
     if file.filename == '':
         return jsonify({'error': 'File selection failed: No file was selected. Please choose a valid PDF file to upload.'}), 400
-    
+
     # Validate file type
     # CHANGE 3: Improved error message for invalid file type
     if not allowed_file(file.filename):
         return jsonify({'error': f'Invalid file type: Only PDF files are allowed. The file "{file.filename}" is not a valid PDF.'}), 400
-    
+
     try:
         # Save uploaded file securely
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
+
         # Extract text from PDF
         pdf_text = extract_text_from_pdf(filepath)
-        
+
         # Parse items from extracted text
         items = parse_nit_items(pdf_text)
-        
+
         # Store items in session for later use
         session['items'] = items
         session['pdf_filename'] = filename
-        
+
         return jsonify({
             'success': True,
             'message': 'PDF processed successfully',
             'items': items,
             'item_count': len(items)
         })
-        
+
     except Exception as e:
         # CHANGE 3: Improved error message for PDF processing errors
         return jsonify({'error': f'PDF processing error: Failed to process the uploaded file. Details: {str(e)}. Please ensure the file is a valid PDF and not corrupted.'}), 500
+
 
 @app.route('/generate_email', methods=['POST'])
 def generate_email():
@@ -287,34 +335,40 @@ def generate_email():
         data = request.json
         email_type = data.get('email_type')
         items = session.get('items', [])
-        
+
         # CHANGE 3: Improved error message for missing items
         if not items:
             return jsonify({'error': 'No items available: Please upload and process a NIT PDF file first before generating emails.'}), 400
-        
+
         email_text = ''
-        
+
         if email_type == 'bq_request':
             tender_details = data.get('tender_details', {})
             email_text = generate_bq_request_email(items, tender_details)
-            
+
         elif email_type == 'oem_authorization':
             oem_name = data.get('oem_name', 'OEM')
             email_text = generate_oem_authorization_email(items, oem_name)
-            
+
+        elif email_type == 'combined':
+            tender_details = data.get('tender_details', {})
+            oem_name = data.get('oem_name', 'OEM')
+            email_text = generate_combined_email(items, tender_details, oem_name)
+
         else:
             # CHANGE 3: Improved error message for invalid email type
-            return jsonify({'error': f'Invalid email type "{email_type}": Please specify either "bq_request" or "oem_authorization".'}), 400
-        
+            return jsonify({'error': f'Invalid email type "{email_type}": Please specify either "bq_request", "oem_authorization", or "combined".'}), 400
+
         return jsonify({
             'success': True,
             'email_text': email_text,
             'email_type': email_type
         })
-        
+
     except Exception as e:
         # CHANGE 3: Improved error message for email generation errors
         return jsonify({'error': f'Email generation error: Failed to generate email. Details: {str(e)}. Please check your request parameters and try again.'}), 500
+
 
 @app.route('/get_items', methods=['GET'])
 def get_items():
@@ -329,6 +383,7 @@ def get_items():
         'items': items,
         'item_count': len(items)
     })
+
 
 if __name__ == '__main__':
     # Run the Flask application
