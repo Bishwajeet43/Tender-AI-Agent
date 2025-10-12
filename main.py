@@ -86,7 +86,7 @@ def parse_nit_items(text):
     for line in lines:
         # Looking for lines that start with a number followed by a period or colon
         # Example patterns: "1. Item description" or "Item No: 1"
-        match = re.match(r'^(\d+)[\.:)]\s+(.+)$', line.strip())
+        match = re.match(r'^(\d+)[\.\:)\]\s+(.+)$', line.strip())
         
         if match:
             item_no = match.group(1)
@@ -152,6 +152,7 @@ Please provide the BQ at your earliest convenience to enable us to prepare our q
 Thank you for your cooperation.
 
 Best regards,
+Bishwajeet Kumar Sharma
 {COMPANY_DETAILS['name']}
 {COMPANY_DETAILS.get('email', '')}
 {COMPANY_DETAILS.get('phone', '')}
@@ -187,7 +188,6 @@ We kindly request an OEM Authorization Certificate for the following items/produ
         email_template += f"{idx}. {item.get('description', 'N/A')}\n"
     
     email_template += f"""
-
 The authorization certificate should:
 - Confirm our authorized dealer/distributor status
 - Include validity period
@@ -199,6 +199,7 @@ This authorization is required for tender participation. We would greatly apprec
 Thank you for your support.
 
 Best regards,
+Bishwajeet Kumar Sharma
 {COMPANY_DETAILS['name']}
 {COMPANY_DETAILS.get('email', '')}
 {COMPANY_DETAILS.get('phone', '')}
