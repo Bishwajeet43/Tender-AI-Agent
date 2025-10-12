@@ -46,3 +46,8 @@ jobs:
         run: |
           SERVICE_URL=$(gcloud run services describe tender-ai-agent --platform managed --region us-central1 --format 'value(status.url)')
           echo "Deployment URL: $SERVICE_URL"
+          - name: 'Authenticate to Google Cloud'
+  uses: 'google-github-actions/auth@v1'
+  with:
+    credentials_json: '${{ secrets.GCP_SA_KEY }}'
+
